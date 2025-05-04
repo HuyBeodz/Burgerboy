@@ -92,27 +92,32 @@ local function createESPForCharacter(char)
 	if ESPObjects[char] then return end
 
 	local highlight = Instance.new("Highlight")
-	highlight.FillColor = Color3.new(1, 0, 0) -- Màu bên trong (ẩn đi)
-	highlight.OutlineColor = Color3.new(1, 1, 1) -- Viền trắng
-	highlight.FillTransparency = 1 -- 1 = hoàn toàn trong suốt
-	highlight.OutlineTransparency = 0.3 -- mờ viền
+	highlight.FillColor = Color3.new(1, 0, 0)
+	highlight.OutlineColor = Color3.new(1, 1, 1)
+	highlight.FillTransparency = 1
+	highlight.OutlineTransparency = 0.3
 	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 	highlight.Adornee = char
 	highlight.Parent = game:GetService("CoreGui")
 
-	-- Xử lý màu sắc theo nhóm
-	local player = Players:GetPlayerFromCharacter(char)
-	if player and player.Team then
-		if player.Team.Name == "Police" then
-			highlight.OutlineColor = Color3.fromRGB(0, 0, 255)  -- Màu xanh cho Police
-		elseif player.Team.Name == "Criminal" then
-			highlight.OutlineColor = Color3.fromRGB(255, 0, 0)  -- Màu đỏ cho Criminal
-		else
-			highlight.OutlineColor = Color3.fromRGB(255, 255, 255)  -- Màu trắng cho các role khác
-		end
-	end
-
 	ESPObjects[char] = highlight
+
+	-- Theo dõi liên tục để cập nhật màu theo team
+	task.spawn(function()
+		while highlight and highlight.Parent and ESPEnabled do
+			local p = Players:GetPlayerFromCharacter(char)
+			if p and p.Team then
+				if p.Team.Name == "Police" then
+					highlight.OutlineColor = Color3.fromRGB(0, 0, 255)
+				elseif p.Team.Name == "Criminal" then
+					highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+				else
+					highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+				end
+			end
+			task.wait(1) -- Cập nhật mỗi giây
+		end
+	end)
 end
 
 
