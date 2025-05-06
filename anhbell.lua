@@ -91,6 +91,9 @@ end
 local function createESPForCharacter(char)
 	if ESPObjects[char] then return end
 
+	local p = Players:GetPlayerFromCharacter(char)
+	if not p then return end
+
 	local highlight = Instance.new("Highlight")
 	highlight.FillColor = Color3.new(1, 0, 0)
 	highlight.OutlineColor = Color3.new(1, 1, 1)
@@ -100,24 +103,58 @@ local function createESPForCharacter(char)
 	highlight.Adornee = char
 	highlight.Parent = game:GetService("CoreGui")
 
-	ESPObjects[char] = highlight
+	-- Create label on head
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "ESPLabel"
+	billboard.Size = UDim2.new(0, 100, 0, 30)
+	billboard.AlwaysOnTop = true
+	billboard.Adornee = char:FindFirstChild("Head")
+	billboard.Parent = game:GetService("CoreGui")
 
-	-- Theo dõi liên tục để cập nhật màu theo team
+	local textLabel = Instance.new("TextLabel")
+	textLabel.Size = UDim2.new(1, 0, 1, 0)
+	textLabel.BackgroundTransparency = 1
+	textLabel.TextColor3 = Color3.new(1, 1, 1)
+	textLabel.TextStrokeTransparency = 0.5
+	textLabel.TextScaled = true
+	textLabel.Font = Enum.Font.SourceSansBold
+	textLabel.Parent = billboard
+
+	ESPObjects[char] = {highlight = highlight, label = billboard}
+
+	-- Update loop
 	task.spawn(function()
-		while highlight and highlight.Parent and ESPEnabled do
-			local p = Players:GetPlayerFromCharacter(char)
-			if p and p.Team then
+		while highlight and highlight.Parent and ESPEnabled and p and p.Character == char do
+			if p.Team then
 				if p.Team.Name == "Police" then
 					highlight.OutlineColor = Color3.fromRGB(0, 0, 255)
+					textLabel.Text = "Vigilant"
+					textLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
 				elseif p.Team.Name == "Criminal" then
 					highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+					textLabel.Text = "Killer"
+					textLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
 				else
 					highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+					textLabel.Text = p.Team.Name
+					textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 				end
 			end
-			task.wait(1) -- Cập nhật mỗi giây
+			task.wait(1)
 		end
 	end)
+end
+
+local function removeESPForCharacter(char)
+	if ESPObjects[char] then
+		if ESPObjects[char].highlight then
+			ESPObjects[char].highlight:Destroy()
+		end
+		if ESPObjects[char].label then
+			ESPObjects[char].label:Destroy()
+		end
+		ESPObjects[char] = nil
+	end
 end
 
 local function removeESPForCharacter(char)
