@@ -120,7 +120,6 @@ local function createESPForCharacter(char)
 	end)
 end
 
-
 local function removeESPForCharacter(char)
 	if ESPObjects[char] then
 		ESPObjects[char]:Destroy()
