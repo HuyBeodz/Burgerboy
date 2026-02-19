@@ -1,3 +1,21 @@
+-- [[ HỆ THỐNG KIỂM TRA KEY - BY BURGERBOY ]]
+local CORRECT_KEY = "stephenbeodz"
+local UserKey = _G.Key or "" 
+
+if UserKey ~= CORRECT_KEY then
+    -- Thông báo cho người dùng khi sai key
+    local success, err = pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Burgerboy System",
+            Text = "Sai Key rồi! Vui lòng nhập đúng Key để sử dụng.",
+            Duration = 10,
+            Button1 = "OK"
+        })
+    end)
+    return -- Dừng toàn bộ script phía sau
+end
+
+-- [[ NẾU ĐÚNG KEY - CHẠY TOÀN BỘ SCRIPT DƯỚI ĐÂY ]]
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -29,7 +47,7 @@ local lockedTarget = nil
 local espCache = {}
 local connections = {}
 
--- == 1. TẠO STATUS UI (Dùng Drawing cho an toàn tuyệt đối) ==
+-- == 1. TẠO STATUS UI ==
 local statusLabel = Drawing.new("Text")
 statusLabel.Visible = true
 statusLabel.Size = 18
@@ -83,7 +101,7 @@ local function GetClosestTarget()
     return target
 end
 
--- == 4. VÒNG LẶP CHÍNH (CẬP NHẬT BOX ESP) ==
+-- == 4. VÒNG LẶP CHÍNH ==
 local renderConn = RunService.RenderStepped:Connect(function()
     if isUnloaded then return end
     
@@ -98,7 +116,6 @@ local renderConn = RunService.RenderStepped:Connect(function()
             local dist = myRoot and (myRoot.Position - root.Position).Magnitude or 0
 
             if onScreen and dist < SETTINGS.ESPDistance then
-                -- Tính toán kích thước Box dựa trên khoảng cách
                 local sizeX = 2000 / pos.Z
                 local sizeY = 3000 / pos.Z
                 
@@ -110,7 +127,6 @@ local renderConn = RunService.RenderStepped:Connect(function()
                 data.Name.Position = Vector2.new(pos.X, pos.Y + (sizeY / 2) + 5)
                 data.Name.Text = player.Name .. " [" .. math.floor(dist) .. "m]"
 
-                -- Đổi màu khi lại gần
                 local color = (dist <= SETTINGS.WarningDistance) and SETTINGS.WarningColor or SETTINGS.BoxColor
                 data.Box.Color = color
                 data.Name.Color = color
@@ -124,7 +140,6 @@ local renderConn = RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Aimbot Logic
     if aimbotEnabled and isAiming and lockedTarget then
         if lockedTarget.Character and lockedTarget.Character.Parent and lockedTarget.Character.Humanoid.Health > 0 then
             local predictPos = lockedTarget.Head.Position + (lockedTarget.Root.Velocity * SETTINGS.PredictionFactor)
@@ -160,7 +175,7 @@ local inputEnded = UserInputService.InputEnded:Connect(function(input)
 end)
 table.insert(connections, inputEnded)
 
--- == 6. HÀM TẠO BOX ESP (SỬ DỤNG DRAWING) ==
+-- == 6. HÀM TẠO BOX ESP ==
 local function CreateESP(player)
     if player == LocalPlayer then return end
     
@@ -184,7 +199,6 @@ local function CreateESP(player)
     }
 end
 
--- Khởi tạo cho người chơi hiện có và mới vào
 for _, p in pairs(Players:GetPlayers()) do CreateESP(p) end
 table.insert(connections, Players.PlayerAdded:Connect(CreateESP))
 table.insert(connections, Players.PlayerRemoving:Connect(function(p)
