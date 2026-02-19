@@ -1,222 +1,196 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local player = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
 
-local Clipon = false
-local ESPEnabled = false
-local SteppedConnection
-local ESPObjects = {}
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
 
--- GUI Setup
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "NoclipGui"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
+-- == CẤU HÌNH ==
+local SETTINGS = {
+    ToggleKey = Enum.KeyCode.J,
+    AimKey = Enum.UserInputType.MouseButton2,
+    UnloadKey = Enum.KeyCode.L,
+    
+    FOV = 150,
+    Smoothness = 0.15, 
+    PredictionFactor = 0.135,
+    AimbotMaxDistance = 500,
+    WarningDistance = 250,
+    ESPDistance = 500,
+    BoxColor = Color3.fromRGB(255, 255, 255),
+    WarningColor = Color3.fromRGB(255, 255, 0)
+}
 
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 200, 0, 130)
-mainFrame.Position = UDim2.new(0.05, 0, 0.85, 0)
-mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-mainFrame.BorderSizePixel = 2
-mainFrame.Active = true
-mainFrame.Draggable = true
-mainFrame.Parent = screenGui
+local aimbotEnabled = false
+local isAiming = false
+local isUnloaded = false
+local lockedTarget = nil 
+local espCache = {}
+local connections = {}
 
--- Title Label
-local bybeodzLabel = Instance.new("TextLabel")
-bybeodzLabel.Size = UDim2.new(1, 0, 0.4, 0)
-bybeodzLabel.Position = UDim2.new(0, 0, 0, 0)
-bybeodzLabel.BackgroundTransparency = 1
-bybeodzLabel.Text = "BYBEODZ"
-bybeodzLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-bybeodzLabel.Font = Enum.Font.Arcade
-bybeodzLabel.TextSize = 28
-bybeodzLabel.TextStrokeTransparency = 0
-bybeodzLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-bybeodzLabel.Parent = mainFrame
+-- == 1. TẠO STATUS UI (Dùng Drawing cho an toàn tuyệt đối) ==
+local statusLabel = Drawing.new("Text")
+statusLabel.Visible = true
+statusLabel.Size = 18
+statusLabel.Color = Color3.fromRGB(255, 0, 0)
+statusLabel.Position = Vector2.new(20, 20)
+statusLabel.Text = "AIMBOT: OFF [J]"
+statusLabel.Outline = true
 
--- Noclip Checkbox
-local noclipCheckbox = Instance.new("TextButton")
-noclipCheckbox.Size = UDim2.new(0, 180, 0, 30)
-noclipCheckbox.Position = UDim2.new(0, 10, 0.4, 5)
-noclipCheckbox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-noclipCheckbox.TextColor3 = Color3.fromRGB(255, 255, 255)
-noclipCheckbox.Font = Enum.Font.SourceSansBold
-noclipCheckbox.TextSize = 20
-noclipCheckbox.Text = "Noclip: OFF"
-noclipCheckbox.Parent = mainFrame
-
--- ESP Checkbox
-local espCheckbox = Instance.new("TextButton")
-espCheckbox.Size = UDim2.new(0, 180, 0, 30)
-espCheckbox.Position = UDim2.new(0, 10, 0.7, 5)
-espCheckbox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-espCheckbox.TextColor3 = Color3.fromRGB(255, 255, 255)
-espCheckbox.Font = Enum.Font.SourceSansBold
-espCheckbox.TextSize = 20
-espCheckbox.Text = "ESP: OFF"
-espCheckbox.Parent = mainFrame
-
--- Toggle Noclip
-local function toggleNoclip()
-	Clipon = not Clipon
-	noclipCheckbox.Text = "Noclip: " .. (Clipon and "ON" or "OFF")
-	noclipCheckbox.BackgroundColor3 = Clipon and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(50, 50, 50)
-
-	if Clipon then
-		SteppedConnection = RunService.Stepped:Connect(function()
-			if player.Character then
-				for _, part in ipairs(player.Character:GetDescendants()) do
-					if part:IsA("BasePart") then
-						part.CanCollide = false
-					end
-				end
-			end
-		end)
-	else
-		if SteppedConnection then SteppedConnection:Disconnect() end
-		if player.Character then
-			for _, part in ipairs(player.Character:GetDescendants()) do
-				if part:IsA("BasePart") then
-					part.CanCollide = true
-				end
-			end
-		end
-	end
+-- == 2. HÀM UNLOAD ==
+local function Unload()
+    isUnloaded = true
+    lockedTarget = nil
+    for _, conn in pairs(connections) do if conn then conn:Disconnect() end end
+    statusLabel:Remove()
+    for _, data in pairs(espCache) do 
+        if data.Box then data.Box:Remove() end 
+        if data.Name then data.Name:Remove() end
+    end
+    table.clear(espCache)
 end
 
--- ESP Utilities
--- ESP Utilities
-local function createESPForCharacter(char)
-	if ESPObjects[char] then return end
+-- == 3. LOGIC TÌM MỤC TIÊU ==
+local function GetClosestTarget()
+    local mouseLoc = UserInputService:GetMouseLocation()
+    local target = nil
+    local shortestDist = SETTINGS.FOV
+    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 
-	local p = Players:GetPlayerFromCharacter(char)
-	if not p then return end
+    if not myRoot then return nil end
 
-	local highlight = Instance.new("Highlight")
-	highlight.FillColor = Color3.new(1, 0, 0)
-	highlight.OutlineColor = Color3.new(1, 1, 1)
-	highlight.FillTransparency = 1
-	highlight.OutlineTransparency = 0.3
-	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-	highlight.Adornee = char
-	highlight.Parent = game:GetService("CoreGui")
-
-	-- Create label on head
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "ESPLabel"
-	billboard.Size = UDim2.new(0, 100, 0, 30)
-	billboard.AlwaysOnTop = true
-	billboard.Adornee = char:FindFirstChild("Head")
-	billboard.Parent = game:GetService("CoreGui")
-
-	local textLabel = Instance.new("TextLabel")
-	textLabel.Size = UDim2.new(1, 0, 1, 0)
-	textLabel.BackgroundTransparency = 1
-	textLabel.TextColor3 = Color3.new(1, 1, 1)
-	textLabel.TextStrokeTransparency = 0.5
-	textLabel.TextScaled = true
-	textLabel.Font = Enum.Font.SourceSansBold
-	textLabel.Parent = billboard
-
-	ESPObjects[char] = {highlight = highlight, label = billboard}
-
-	-- Update loop
-	task.spawn(function()
-		while highlight and highlight.Parent and ESPEnabled and p and p.Character == char do
-			if p.Team then
-				if p.Team.Name == "Police" then
-					highlight.OutlineColor = Color3.fromRGB(0, 0, 255)
-					textLabel.Text = "Vigilant"
-					textLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
-				elseif p.Team.Name == "Criminal" then
-					highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-					textLabel.Text = "Killer"
-					textLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
-				else
-					highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-					textLabel.Text = p.Team.Name
-					textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-				end
-			end
-			task.wait(1)
-		end
-	end)
+    for player, data in pairs(espCache) do
+        local char = player.Character
+        if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            local head = char:FindFirstChild("Head")
+            if root and head then
+                local worldDist = (root.Position - myRoot.Position).Magnitude
+                if worldDist <= SETTINGS.AimbotMaxDistance then
+                    local pos, onScreen = Camera:WorldToViewportPoint(head.Position)
+                    if onScreen then
+                        local mouseDist = (Vector2.new(pos.X, pos.Y) - mouseLoc).Magnitude
+                        if mouseDist < shortestDist then
+                            shortestDist = mouseDist
+                            target = {Character = char, Root = root, Head = head}
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return target
 end
 
-local function removeESPForCharacter(char)
-	if ESPObjects[char] then
-		if ESPObjects[char].highlight then
-			ESPObjects[char].highlight:Destroy()
-		end
-		if ESPObjects[char].label then
-			ESPObjects[char].label:Destroy()
-		end
-		ESPObjects[char] = nil
-	end
-end
+-- == 4. VÒNG LẶP CHÍNH (CẬP NHẬT BOX ESP) ==
+local renderConn = RunService.RenderStepped:Connect(function()
+    if isUnloaded then return end
+    
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
-local function removeESPForCharacter(char)
-	if ESPObjects[char] then
-		ESPObjects[char]:Destroy()
-		ESPObjects[char] = nil
-	end
-end
+    for player, data in pairs(espCache) do
+        local char = player.Character
+        if char and char.Parent and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+            local root = char.HumanoidRootPart
+            local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
+            local dist = myRoot and (myRoot.Position - root.Position).Magnitude or 0
 
--- Toggle ESP
-local function toggleESP()
-	ESPEnabled = not ESPEnabled
-	espCheckbox.Text = "ESP: " .. (ESPEnabled and "ON" or "OFF")
-	espCheckbox.BackgroundColor3 = ESPEnabled and Color3.fromRGB(0, 0, 100) or Color3.fromRGB(50, 50, 50)
+            if onScreen and dist < SETTINGS.ESPDistance then
+                -- Tính toán kích thước Box dựa trên khoảng cách
+                local sizeX = 2000 / pos.Z
+                local sizeY = 3000 / pos.Z
+                
+                data.Box.Visible = true
+                data.Box.Size = Vector2.new(sizeX, sizeY)
+                data.Box.Position = Vector2.new(pos.X - sizeX / 2, pos.Y - sizeY / 2)
+                
+                data.Name.Visible = true
+                data.Name.Position = Vector2.new(pos.X, pos.Y + (sizeY / 2) + 5)
+                data.Name.Text = player.Name .. " [" .. math.floor(dist) .. "m]"
 
-	for _, p in pairs(Players:GetPlayers()) do
-		if p ~= player and p.Character then
-			if ESPEnabled then
-				createESPForCharacter(p.Character)
-			else
-				removeESPForCharacter(p.Character)
-			end
-		end
-	end
-end
+                -- Đổi màu khi lại gần
+                local color = (dist <= SETTINGS.WarningDistance) and SETTINGS.WarningColor or SETTINGS.BoxColor
+                data.Box.Color = color
+                data.Name.Color = color
+            else
+                data.Box.Visible = false
+                data.Name.Visible = false
+            end
+        else
+            data.Box.Visible = false
+            data.Name.Visible = false
+        end
+    end
 
--- Checkbox Button Events
-noclipCheckbox.MouseButton1Click:Connect(toggleNoclip)
-espCheckbox.MouseButton1Click:Connect(toggleESP)
-
--- Keybind for Noclip
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if not gameProcessed and input.KeyCode == Enum.KeyCode.N then
-		toggleNoclip()
-	end
+    -- Aimbot Logic
+    if aimbotEnabled and isAiming and lockedTarget then
+        if lockedTarget.Character and lockedTarget.Character.Parent and lockedTarget.Character.Humanoid.Health > 0 then
+            local predictPos = lockedTarget.Head.Position + (lockedTarget.Root.Velocity * SETTINGS.PredictionFactor)
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, predictPos), SETTINGS.Smoothness)
+        else
+            lockedTarget = nil
+        end
+    end
 end)
+table.insert(connections, renderConn)
 
--- Auto apply ESP to future players
-Players.PlayerAdded:Connect(function(plr)
-	plr.CharacterAdded:Connect(function(char)
-		if ESPEnabled then
-			createESPForCharacter(char)
-		end
-	end)
+-- == 5. INPUT ==
+local inputBegan = UserInputService.InputBegan:Connect(function(input, gp)
+    if gp or isUnloaded then return end
+    if input.KeyCode == SETTINGS.ToggleKey then
+        aimbotEnabled = not aimbotEnabled
+        statusLabel.Text = "AIMBOT: " .. (aimbotEnabled and "ON" or "OFF")
+        statusLabel.Color = aimbotEnabled and Color3.new(0,1,0) or Color3.new(1,0,0)
+    elseif input.KeyCode == SETTINGS.UnloadKey then
+        Unload()
+    elseif input.UserInputType == SETTINGS.AimKey then
+        isAiming = true
+        lockedTarget = GetClosestTarget()
+    end
 end)
+table.insert(connections, inputBegan)
 
-for _, p in pairs(Players:GetPlayers()) do
-	if p ~= player and p.Character then
-		if ESPEnabled then
-			createESPForCharacter(p.Character)
-		end
-	end
-	p.CharacterAdded:Connect(function(char)
-		if ESPEnabled then
-			createESPForCharacter(char)
-		end
-	end)
+local inputEnded = UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == SETTINGS.AimKey then
+        isAiming = false
+        lockedTarget = nil
+    end
+end)
+table.insert(connections, inputEnded)
+
+-- == 6. HÀM TẠO BOX ESP (SỬ DỤNG DRAWING) ==
+local function CreateESP(player)
+    if player == LocalPlayer then return end
+    
+    local box = Drawing.new("Square")
+    box.Visible = false
+    box.Thickness = 1
+    box.Filled = false
+    box.Transparency = 1
+    box.Color = SETTINGS.BoxColor
+
+    local name = Drawing.new("Text")
+    name.Visible = false
+    name.Center = true
+    name.Outline = true
+    name.Size = 13
+    name.Color = Color3.new(1,1,1)
+
+    espCache[player] = {
+        Box = box,
+        Name = name
+    }
 end
 
--- Clean ESP when player leaves
-Players.PlayerRemoving:Connect(function(p)
-	if p.Character then
-		removeESPForCharacter(p.Character)
-	end
-end)
+-- Khởi tạo cho người chơi hiện có và mới vào
+for _, p in pairs(Players:GetPlayers()) do CreateESP(p) end
+table.insert(connections, Players.PlayerAdded:Connect(CreateESP))
+table.insert(connections, Players.PlayerRemoving:Connect(function(p)
+    if espCache[p] then
+        espCache[p].Box:Remove()
+        espCache[p].Name:Remove()
+        espCache[p] = nil
+    end
+end))
