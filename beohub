@@ -1,21 +1,25 @@
--- [[ HỆ THỐNG KIỂM TRA KEY - BY BURGERBOY ]]
-local CORRECT_KEY = "stephenbeodz"
+-- [[ HỆ THỐNG KIỂM TRA KEY ONLINE - BY BURGERBOY ]]
+local KeyLink = "https://raw.githubusercontent.com/HuyBeodz/Burgerboy/main/key.txt" -- THAY LINK RAW KEY CỦA BẠN VÀO ĐÂY
 local UserKey = _G.Key or "" 
 
-if UserKey ~= CORRECT_KEY then
-    -- Thông báo cho người dùng khi sai key
-    local success, err = pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "Burgerboy System",
-            Text = "Sai Key rồi! Vui lòng nhập đúng Key để sử dụng.",
-            Duration = 10,
-            Button1 = "OK"
-        })
-    end)
-    return -- Dừng toàn bộ script phía sau
+-- Lấy Key từ trên mạng về
+local success, CorrectKey = pcall(function()
+    return game:HttpGet(KeyLink):gsub("%s+", "") -- Lấy text và xóa khoảng trắng thừa
+end)
+
+if not success or UserKey ~= CorrectKey then
+    -- Thông báo lỗi hoặc sai key
+    local StarterGui = game:GetService("StarterGui")
+    StarterGui:SetCore("SendNotification", {
+        Title = "Burgerboy System",
+        Text = (not success and "Lỗi kết nối máy chủ Key!" or "Sai Key rồi! Vui lòng nhập đúng Key."),
+        Duration = 10,
+        Button1 = "OK"
+    })
+    return -- Ngắt script
 end
 
--- [[ NẾU ĐÚNG KEY - CHẠY TOÀN BỘ SCRIPT DƯỚI ĐÂY ]]
+-- [[ NẾU ĐÚNG KEY - CHẠY TIẾP PHẦN DƯỚI ]]
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
