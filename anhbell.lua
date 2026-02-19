@@ -1,5 +1,5 @@
 -- [[ HỆ THỐNG KIỂM TRA KEY ONLINE - BY BURGERBOY ]]
-local KeyLink = "https://github.com/HuyBeodz/Burgerboy/blob/main/key" -- THAY LINK RAW KEY CỦA BẠN VÀO ĐÂY
+local KeyLink = "https://raw.githubusercontent.com/HuyBeodz/Burgerboy/main/key" -- THAY LINK RAW KEY CỦA BẠN VÀO ĐÂY
 local UserKey = _G.Key or "" 
 
 -- Lấy Key từ trên mạng về
@@ -212,4 +212,5 @@ table.insert(connections, Players.PlayerRemoving:Connect(function(p)
         espCache[p] = nil
     end
 end))
+
 
